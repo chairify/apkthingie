@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>APK Extractor - Chair</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #ffffff, #a29ff1, #a29ff1, #ffffff);
+      font-family: 'Futura', sans-serif;
+      margin: 0;
+      padding: 0;
+      color: #ffffff;
+      text-align: center;
+      overflow-x: hidden;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .enter-screen {
+      position: fixed;
+      inset: 0;
+      background: linear-gradient(135deg, #ffffff, #a29ff1, #a29ff1, #ffffff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      cursor: pointer;
+      font-size: 3rem;
+      color: white;
+      text-transform: lowercase;
+      transition: transform 0.2s ease, text-shadow 0.2s ease;
+      user-select: none;
+      text-shadow: 0 0 8px #fff, 0 0 15px #fff;
+    }
+
+    .enter-screen:hover {
+      transform: scale(1.05);
+      text-shadow: 0 0 12px #fff, 0 0 20px #fff;
+    }
+
+    .enter-screen:active {
+      transform: scale(0.95);
+    }
+
+    .apk-ui {
+      display: none;
+      padding: 40px;
+      color: #000;
+      text-align: left;
+    }
+
+    .apk-ui h1 {
+      text-align: center;
+      color: white;
+      text-shadow: 0 0 8px #a29ff1, 0 0 20px #a29ff1;
+    }
+
+    $1
+      padding: 10px 20px;
+      border-radius: 12px;
+      background-color: #f0f0f0;
+      border: 2px solid #0a2e8a;
+      color: #0a2e8a;
+      font-family: 'Futura', sans-serif;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    .file, .folder {
+      margin: 5px 0;
+      background: rgba(255,255,255,0.2);
+      padding: 10px;
+      border-radius: 8px;
+      color: #000;
+      cursor: pointer;
+    }
+
+    $1
+      font-family: 'Futura', sans-serif;
+      font-size: 1rem;
+
+    .file button:hover {
+      background-color: #3754d1;
+    }
+
+    #watermark, #note {
+      position: fixed;
+      font-size: 0.95rem;
+      color: white;
+      text-shadow: 0 0 8px white, 0 0 15px white;
+      user-select: none;
+      opacity: 0;
+      transition: opacity 1s ease-in;
+    }
+
+    #watermark.show, #note.show {
+      opacity: 1;
+    }
+
+    #watermark {
+      bottom: 10px;
+      left: 10px;
+    }
+
+    #note {
+      bottom: 10px;
+      right: 10px;
+      max-width: 300px;
+      text-align: right;
+    }
+
+    .back-button {
+      background: none;
+      border: none;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-bottom: 10px;
+      color: #0a2e8a;
+      text-shadow: 0 0 6px #fff;
+    }
+  </style>
+</head>
+<body>
+  <div class="enter-screen" onclick="startApp()">click to enter..</div>
+
+  <div class="apk-ui" id="apkUI">
+    <h1>APK Extractor</h1>
+    <input type="file" id="apkFile" accept=".apk" />
+
+    <div id="fileList"></div>
+  </div>
+
+  <div class="bottom-left-credit" id="watermark">Made By Chair (application.quit)</div>
+  <div class="bottom-right-note" id="note">this is mainly for grabbing metadatas but if for whatever reason you want game files here ya go ig</div>
+
+  <script>
+    const enterScreen = document.querySelector(".enter-screen");
+    const apkUI = document.getElementById("apkUI");
+    const watermark = document.getElementById("watermark");
+    const note = document.getElementById("note");
+    const fileInput = document.getElementById('apkFile');
+    const fileList = document.getElementById('fileList');
+
+    let zipRoot = null;
+    let pathMap = {};
+    let currentPath = "";
+
+    function startApp() {
+      enterScreen.style.display = "none";
+      apkUI.style.display = "block";
+      setTimeout(() => {
+        watermark.classList.add("show");
+        note.classList.add("show");
+      }, 2000);
+    }
+
+    fileInput.addEventListener('change', async function () {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const zip = await JSZip.loadAsync(arrayBuffer);
+      zipRoot = zip;
+      pathMap = {};
+
+      zip.forEach((relativePath, zipEntry) => {
+        const parts = relativePath.split("/");
+        let current = pathMap;
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          if (!current[part]) {
+            current[part] = { __entry: null, __children: {} };
+          }
+          if (i === parts.length - 1) {
+            current[part].__entry = zipEntry;
+          }
+          current = current[part].__children;
+        }
+      });
+
+      currentPath = "";
+      renderPath(pathMap, "");
+    });
+
+    function renderPath(map, path) {
+      fileList.innerHTML = "";
+      if (path !== "") {
+        const backBtn = document.createElement("button");
+        backBtn.textContent = "← Back";
+        backBtn.className = "back-button";
+        backBtn.onclick = () => {
+          const parent = path.split("/").slice(0, -1).join("/");
+          const targetMap = parent ? traversePath(parent) : pathMap;
+          currentPath = parent;
+          renderPath(targetMap, parent);
+        };
+        fileList.appendChild(backBtn);
+      }
+
+      const folders = [];
+      const files = [];
+
+      for (const key in map) {
+        if (Object.keys(map[key].__children).length > 0) {
+          folders.push(key);
+        } else if (map[key].__entry && !map[key].__entry.dir) {
+          files.push(key);
+        }
+      }
+
+      folders.sort((a, b) => a.localeCompare(b));
+      files.sort((a, b) => a.localeCompare(b));
+
+      const allKeys = [...folders, ...files];
+
+      for (const key of allKeys) {
+        const item = map[key];
+        const div = document.createElement("div");
+        if (Object.keys(item.__children).length > 0) {
+          div.textContent = `📁 ${key}`;
+          div.className = "folder";
+          div.onclick = () => {
+            currentPath = path ? `${path}/${key}` : key;
+            renderPath(item.__children, currentPath);
+          };
+        } else if (item.__entry && !item.__entry.dir) {
+          div.textContent = key;
+          div.className = "file";
+          const btn = document.createElement("button");
+          btn.textContent = "Download";
+          btn.onclick = async (e) => {
+            e.stopPropagation();
+            const blob = await item.__entry.async('blob');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = key;
+            a.click();
+          };
+          div.appendChild(btn);
+        }
+        fileList.appendChild(div);
+      }
+    }
+
+    function traversePath(path) {
+      const parts = path.split("/");
+      let current = pathMap;
+      for (const part of parts) {
+        if (current[part]) {
+          current = current[part].__children;
+        } else {
+          return {};
+        }
+      }
+      return current;
+    }
+  </script>
+</body>
+</html>
